@@ -1,25 +1,31 @@
 # Musiq
 
-A fast, minimal Linux music player in the style of classic GTK music players — dark monospace UI, three-column layout, animated disc visualizer.
+A fast, minimal Linux music player in the style of classic GTK music players — dark monospace UI, three-column layout.
 
 Built entirely in **Rust** using:
-- **iced** — pure-Rust GUI (Elm architecture, wgpu rendering, no GTK needed)
+- **eframe/egui** — pure-Rust GUI (immediate mode, wgpu rendering)
 - **rodio** — audio playback via ALSA/PulseAudio/PipeWire
 - **lofty** — audio tag reading (ID3, Vorbis, MP4, AIFF)
 - **walkdir** — fast recursive directory scanning
 - **rfd** — native file picker dialog (xdg-portal on Linux)
+- **image** — album art decoding (JPEG, PNG)
 
 ## Features
 
 - Folder picker intro screen — point it at your music directory
 - Fast library scan with metadata reading (title, artist, album, track #, duration)
-- Artist → Album → Track navigation
-- Animated disc visualizer (canvas-drawn, 60fps)
+- Artist / Album / Track navigation with sidebar
 - Play / Pause / Next / Previous / Seek
 - Shuffle and Repeat
 - Volume control
 - Auto-advance to next track
 - "Restart or go back" previous button (< 3s → restart, > 3s → previous)
+- Fuzzy search across title, artist, album
+- Album art display
+- Persistent state (last folder, volume, play counts) saved to `~/.config/musiq/state.toml`
+- Drag-and-drop folder support
+- Global keyboard shortcuts (Space, Arrows, S, R)
+- Custom titlebar with window dragging
 
 ## Supported formats
 
@@ -99,47 +105,36 @@ src/
 ├── app.rs       — Application state, Message enum, update logic (MVU)
 ├── audio.rs     — rodio audio engine wrapper (play/pause/seek/volume)
 ├── library.rs   — Directory scanner, lofty tag reader, Library struct
-├── ui.rs        — All iced view functions + canvas visualizer
-└── theme.rs     — Color constants, size constants
+├── ui.rs        — All egui view functions
+├── theme.rs     — Color constants, style setup
+├── search.rs    — Fuzzy scored search across tracks
+└── persist.rs   — Save/load state to ~/.config/musiq/state.toml
 ```
 
 ### State flow
 
 ```
-User clicks folder → pick_folder() dialog → ScanComplete(Library)
-                                                     ↓
-                                          Screen::Player shown
-                                                     ↓
+User clicks folder → pick_folder() dialog → scan_path() → ScanComplete(Library)
+                                                            ↓
+                                                 Screen::Player shown
+                                                            ↓
 User clicks track → SelectTrack(idx) → engine.play(path) → Sink running
-                                                     ↓
-60fps Tick → update progress bar, advance visualizer phase
-           → engine.is_finished()? → play_next()
+                                                            ↓
+Tick → update progress bar, advance visualizer phase
+    → engine.is_finished()? → play_next()
 ```
 
-### Performance notes
+## Keyboard shortcuts
 
-- Library scan runs in a `tokio::task::spawn_blocking` thread — UI stays responsive
-- Audio decoding runs in rodio's internal thread with a buffer — zero UI thread blocking
-- Visualizer uses iced's `Canvas` widget — only redraws on `Tick` messages
-- `lto = true` + `codegen-units = 1` in release gives ~30% smaller, faster binary
-- Release binary is typically 6–10MB stripped
-
-## Extending
-
-**Add waveform/spectrum visualizer:**
-Use `rodio_tap` crate to intercept audio samples, run FFT with `rustfft`, feed
-frequency bins to the canvas via app state.
-
-**Add album art display:**
-`lofty` already extracts embedded APIC/FLAC PICTURE blocks (see `library.rs`).
-Load the bytes as an `iced::widget::Image` and display in the center panel.
-
-**Add playlist support:**
-Serialize/deserialize `Vec<PathBuf>` with `serde_json` to `~/.config/musiq/playlists/`.
-
-**Add mpris2 media keys:**
-Use the `mpris` crate to expose a D-Bus MediaPlayer2 interface — lets you control
-playback from GNOME/KDE media key buttons and `playerctl`.
+| Key | Action |
+|-----|--------|
+| Space | Play / Pause |
+| Left Arrow | Previous track (or restart if > 3s) |
+| Right Arrow | Next track |
+| Up Arrow | Volume up |
+| Down Arrow | Volume down |
+| S | Toggle shuffle |
+| R | Toggle repeat |
 
 ## License
 
